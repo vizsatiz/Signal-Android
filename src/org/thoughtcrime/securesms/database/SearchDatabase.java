@@ -81,10 +81,9 @@ public class SearchDatabase extends Database {
   public Cursor queryMessages(@NonNull String query) {
     SQLiteDatabase db = databaseHelper.getReadableDatabase();
 
-    // Make the query a 'prefix' query. Without this, the query has to match a token exactly.
-    query += '*';
+    String prefixQuery = query + '*';
 
-    return db.rawQuery(MESSAGES_QUERY, new String[] { query, query });
+    return db.rawQuery(MESSAGES_QUERY, new String[] { prefixQuery, prefixQuery });
   }
 }
 

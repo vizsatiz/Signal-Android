@@ -65,8 +65,6 @@ public class SearchFragment extends Fragment implements SearchListAdapter.EventL
 
     this.locale = (Locale) getArguments().getSerializable(EXTRA_LOCALE);
 
-    // Note: We essentially construct the dependency graph here. We can move this out in the future
-    //       if we ever start using a DI framework.
     SearchRepository searchRepository = new SearchRepository(getContext(),
                                                              DatabaseFactory.getSearchDatabase(getContext()),
                                                              DatabaseFactory.getContactsDatabase(getContext()),
@@ -123,6 +121,7 @@ public class SearchFragment extends Fragment implements SearchListAdapter.EventL
   @Override
   public void onConversationClicked(@NonNull ThreadRecord threadRecord) {
     ConversationListActivity conversationList = (ConversationListActivity) getActivity();
+
     if (conversationList != null) {
       conversationList.onCreateConversation(threadRecord.getThreadId(),
                                             threadRecord.getRecipient(),

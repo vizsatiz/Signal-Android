@@ -136,14 +136,14 @@ public class ConversationListActivity extends PassphraseRequiredActionBarActivit
           if (searchFragment == null) {
             searchFragment = SearchFragment.newInstance(dynamicLanguage.getCurrentLocale());
             getSupportFragmentManager().beginTransaction()
-                .add(R.id.fragment_container, searchFragment, null)
-                .commit();
+                                       .add(R.id.fragment_container, searchFragment, null)
+                                       .commit();
           }
           searchFragment.updateSearchQuery(trimmed);
         } else if (searchFragment != null) {
           getSupportFragmentManager().beginTransaction()
-              .remove(searchFragment)
-              .commit();
+                                     .remove(searchFragment)
+                                     .commit();
           searchFragment = null;
         }
       }
@@ -183,8 +183,6 @@ public class ConversationListActivity extends PassphraseRequiredActionBarActivit
   }
 
   public void openConversation(long threadId, Recipient recipient, int distributionType, long lastSeen, int startingPosition) {
-    // If the search bar is still focused, Android will keep the keyboard up when we go to the
-    // conversation activity, which will cause our scroll positioning to be incorrect
     searchToolbar.clearFocus();
 
     Intent intent = new Intent(this, ConversationActivity.class);

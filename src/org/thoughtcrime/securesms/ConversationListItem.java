@@ -171,7 +171,8 @@ public class ConversationListItem extends RelativeLayout
   public void bind(@NonNull  Recipient     contact,
                    @NonNull  GlideRequests glideRequests,
                    @NonNull  Locale        locale,
-                   @Nullable String        highlightSubstring) {
+                   @Nullable String        highlightSubstring)
+  {
     this.selectedThreads = Collections.emptySet();
     this.recipient       = contact;
     this.glideRequests   = glideRequests;
@@ -195,7 +196,8 @@ public class ConversationListItem extends RelativeLayout
   public void bind(@NonNull  MessageResult messageResult,
                    @NonNull  GlideRequests glideRequests,
                    @NonNull  Locale        locale,
-                   @Nullable String        highlightSubstring) {
+                   @Nullable String        highlightSubstring)
+  {
     this.selectedThreads = Collections.emptySet();
     this.recipient       = messageResult.recipient;
     this.glideRequests   = glideRequests;
@@ -323,6 +325,7 @@ public class ConversationListItem extends RelativeLayout
 
     int startPosition = value.toLowerCase(locale).indexOf(highlight.toLowerCase());
     int endPosition   = startPosition + highlight.length();
+
     if (startPosition < 0) {
       return new SpannableString(value);
     }

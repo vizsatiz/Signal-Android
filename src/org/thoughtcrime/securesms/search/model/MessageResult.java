@@ -5,7 +5,7 @@ import android.support.annotation.NonNull;
 import org.thoughtcrime.securesms.recipients.Recipient;
 
 /**
- * Represents a search result for a message
+ * Represents a search result for a message.
  */
 public class MessageResult {
 
@@ -17,7 +17,8 @@ public class MessageResult {
   public MessageResult(@NonNull Recipient recipient,
                        @NonNull String bodySnippet,
                        long threadId,
-                       long receivedTimestampMs) {
+                       long receivedTimestampMs)
+  {
     this.recipient           = recipient;
     this.bodySnippet         = bodySnippet;
     this.threadId            = threadId;

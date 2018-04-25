@@ -36,7 +36,8 @@ class SearchListAdapter extends    RecyclerView.Adapter<SearchListAdapter.Search
 
   SearchListAdapter(@NonNull GlideRequests glideRequests,
                     @NonNull EventListener eventListener,
-                    @NonNull Locale        locale) {
+                    @NonNull Locale        locale)
+  {
     this.glideRequests = glideRequests;
     this.eventListener = eventListener;
     this.locale        = locale;
@@ -52,18 +53,21 @@ class SearchListAdapter extends    RecyclerView.Adapter<SearchListAdapter.Search
   @Override
   public void onBindViewHolder(@NonNull SearchResultViewHolder holder, int position) {
     ThreadRecord conversationResult = getConversationResult(position);
+
     if (conversationResult != null) {
       holder.bind(conversationResult, glideRequests, eventListener, locale, searchResult.getQuery());
       return;
     }
 
     Recipient contactResult = getContactResult(position);
+
     if (contactResult != null) {
       holder.bind(contactResult, glideRequests, eventListener, locale, searchResult.getQuery());
       return;
     }
 
     MessageResult messageResult = getMessageResult(position);
+
     if (messageResult != null) {
       holder.bind(messageResult, glideRequests, eventListener, locale, searchResult.getQuery());
     }

@@ -4,6 +4,7 @@ package org.thoughtcrime.securesms.database.helpers;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.util.Log;
 
@@ -183,7 +184,25 @@ public class SQLCipherOpenHelper extends SQLiteOpenHelper {
       }
 
       if (oldVersion < FULL_TEXT_SEARCH) {
-        FullTextSearchMigrationHelper.migrateToFullTextSearch(db);
+        for (String sql : SearchDatabase.CREATE_TABLE) {
+          db.execSQL(sql);
+        }
+
+        Log.i(TAG, "Beginning to build search index.");
+        long start = SystemClock.elapsedRealtime();
+
+        db.execSQL("INSERT INTO " + SearchDatabase.SMS_FTS_TABLE_NAME + " (rowid, " + SearchDatabase.BODY + ") " +
+            "SELECT " + SmsDatabase.ID + " , " + SmsDatabase.BODY + " FROM " + SmsDatabase.TABLE_NAME);
+
+        long smsFinished = SystemClock.elapsedRealtime();
+        Log.i(TAG, "Indexing SMS completed in " + (smsFinished - start) + " ms");
+
+        db.execSQL("INSERT INTO " + SearchDatabase.MMS_FTS_TABLE_NAME + " (rowid, " + SearchDatabase.BODY + ") " +
+            "SELECT " + MmsDatabase.ID + " , " + MmsDatabase.BODY + " FROM " + MmsDatabase.TABLE_NAME);
+
+        long mmsFinished = SystemClock.elapsedRealtime();
+        Log.i(TAG, "Indexing MMS completed in " + (mmsFinished - smsFinished) + " ms");
+        Log.i(TAG, "Indexing finished. Total time: " + (mmsFinished - start) + " ms");
       }
 
       db.setTransactionSuccessful();
