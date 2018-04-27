@@ -188,6 +188,7 @@ public class MmsSmsDatabase extends Database {
                               "json_group_array(json_object(" +
                                   "'" + AttachmentDatabase.ROW_ID + "', " + AttachmentDatabase.TABLE_NAME + "." + AttachmentDatabase.ROW_ID + ", " +
                                   "'" + AttachmentDatabase.UNIQUE_ID + "', " + AttachmentDatabase.TABLE_NAME + "." + AttachmentDatabase.UNIQUE_ID + ", " +
+                                  "'" + AttachmentDatabase.LINKED_ID+ "', " + AttachmentDatabase.TABLE_NAME + "." + AttachmentDatabase.LINKED_ID + ", " +
                                   "'" + AttachmentDatabase.MMS_ID + "', " + AttachmentDatabase.TABLE_NAME + "." + AttachmentDatabase.MMS_ID + "," +
                                   "'" + AttachmentDatabase.SIZE + "', " + AttachmentDatabase.TABLE_NAME + "." + AttachmentDatabase.SIZE + ", " +
                                   "'" + AttachmentDatabase.FILE_NAME + "', " + AttachmentDatabase.TABLE_NAME + "." + AttachmentDatabase.FILE_NAME + ", " +
@@ -281,6 +282,7 @@ public class MmsSmsDatabase extends Database {
 
     mmsColumnsPresent.add(AttachmentDatabase.ROW_ID);
     mmsColumnsPresent.add(AttachmentDatabase.UNIQUE_ID);
+    mmsColumnsPresent.add(AttachmentDatabase.LINKED_ID);
     mmsColumnsPresent.add(AttachmentDatabase.MMS_ID);
     mmsColumnsPresent.add(AttachmentDatabase.SIZE);
     mmsColumnsPresent.add(AttachmentDatabase.FILE_NAME);

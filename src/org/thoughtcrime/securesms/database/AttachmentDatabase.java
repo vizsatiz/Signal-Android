@@ -73,6 +73,7 @@ public class AttachmentDatabase extends Database {
 
   public  static final String TABLE_NAME             = "part";
   public  static final String ROW_ID                 = "_id";
+  public  static final String LINKED_ID              = "linked_id";
           static final String ATTACHMENT_JSON_ALIAS  = "attachment_json";
           static final String MMS_ID                 = "mid";
           static final String CONTENT_TYPE           = "ct";
@@ -104,7 +105,7 @@ public class AttachmentDatabase extends Database {
 
   private static final String PART_ID_WHERE = ROW_ID + " = ? AND " + UNIQUE_ID + " = ?";
 
-  private static final String[] PROJECTION = new String[] {ROW_ID,
+  private static final String[] PROJECTION = new String[] {ROW_ID, LINKED_ID,
                                                            MMS_ID, CONTENT_TYPE, NAME, CONTENT_DISPOSITION,
                                                            CONTENT_LOCATION, DATA, THUMBNAIL, TRANSFER_STATE,
                                                            SIZE, FILE_NAME, THUMBNAIL, THUMBNAIL_ASPECT_RATIO,
@@ -112,7 +113,7 @@ public class AttachmentDatabase extends Database {
                                                            QUOTE, DATA_RANDOM, THUMBNAIL_RANDOM, WIDTH, HEIGHT};
 
   public static final String CREATE_TABLE = "CREATE TABLE " + TABLE_NAME + " (" + ROW_ID + " INTEGER PRIMARY KEY, " +
-    MMS_ID + " INTEGER, " + "seq" + " INTEGER DEFAULT 0, "                        +
+    LINKED_ID + " INTEGER DEFAULT 0, " + MMS_ID + " INTEGER, " + "seq" + " INTEGER DEFAULT 0, " +
     CONTENT_TYPE + " TEXT, " + NAME + " TEXT, " + "chset" + " INTEGER, "             +
     CONTENT_DISPOSITION + " TEXT, " + "fn" + " TEXT, " + "cid" + " TEXT, "  +
     CONTENT_LOCATION + " TEXT, " + "ctt_s" + " INTEGER, "                 +
@@ -347,7 +348,10 @@ public class AttachmentDatabase extends Database {
     thumbnailExecutor.submit(new ThumbnailFetchCallable(attachmentId));
   }
 
-  void insertAttachmentsForMessage(long mmsId, @NonNull List<Attachment> attachments, @NonNull List<Attachment> quoteAttachment)
+  void insertAttachmentsForMessage(long mmsId,
+                                   @NonNull List<Attachment> attachments,
+                                   @NonNull List<Attachment> quoteAttachment,
+                                   @NonNull List<MmsDatabase.LinkedAttachmentSet> linkedAttachments)
       throws MmsException
   {
     Log.w(TAG, "insertParts(" + attachments.size() + ")");
@@ -359,6 +363,14 @@ public class AttachmentDatabase extends Database {
 
     for (Attachment attachment : quoteAttachment) {
       insertAttachment(mmsId, attachment, true);
+    }
+
+    for (MmsDatabase.LinkedAttachmentSet linkSet : linkedAttachments) {
+      AttachmentId rootId = insertAttachment(mmsId, linkSet.getRoot(), linkSet.getRoot().isQuote());
+
+      for (Attachment link : linkSet.getLinked()) {
+        insertAttachment(mmsId, link, link.isQuote(), rootId.getRowId());
+      }
     }
   }
 
@@ -401,6 +413,7 @@ public class AttachmentDatabase extends Database {
                                   databaseAttachment.isVoiceNote(),
                                   mediaStream.getWidth(),
                                   mediaStream.getHeight(),
+                                  databaseAttachment.getLinkedId(),
                                   databaseAttachment.isQuote());
   }
 
@@ -574,6 +587,7 @@ public class AttachmentDatabase extends Database {
                                               object.getInt(VOICE_NOTE) == 1,
                                               object.getInt(WIDTH),
                                               object.getInt(HEIGHT),
+                                              object.getLong(LINKED_ID),
                                               object.getInt(QUOTE) == 1));
           }
         }
@@ -597,6 +611,7 @@ public class AttachmentDatabase extends Database {
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(VOICE_NOTE)) == 1,
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(WIDTH)),
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(HEIGHT)),
+                                                                cursor.getLong(cursor.getColumnIndexOrThrow(LINKED_ID)),
                                                                 cursor.getInt(cursor.getColumnIndexOrThrow(QUOTE)) == 1));
       }
     } catch (JSONException e) {
@@ -604,8 +619,13 @@ public class AttachmentDatabase extends Database {
     }
   }
 
-
   private AttachmentId insertAttachment(long mmsId, Attachment attachment, boolean quote)
+      throws MmsException
+  {
+    return insertAttachment(mmsId, attachment, quote, 0);
+  }
+
+  private AttachmentId insertAttachment(long mmsId, Attachment attachment, boolean quote, long linkedRowId)
       throws MmsException
   {
     Log.w(TAG, "Inserting attachment for mms id: " + mmsId);
@@ -635,6 +655,7 @@ public class AttachmentDatabase extends Database {
     contentValues.put(WIDTH, attachment.getWidth());
     contentValues.put(HEIGHT, attachment.getHeight());
     contentValues.put(QUOTE, quote);
+    contentValues.put(LINKED_ID, linkedRowId);
 
     if (dataInfo != null) {
       contentValues.put(DATA, dataInfo.file.getAbsolutePath());

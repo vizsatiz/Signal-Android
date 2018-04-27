@@ -11,19 +11,21 @@ public class DatabaseAttachment extends Attachment {
   private final long         mmsId;
   private final boolean      hasData;
   private final boolean      hasThumbnail;
+  private final long         linkedId;
 
   public DatabaseAttachment(AttachmentId attachmentId, long mmsId,
                             boolean hasData, boolean hasThumbnail,
                             String contentType, int transferProgress, long size,
                             String fileName, String location, String key, String relay,
                             byte[] digest, String fastPreflightId, boolean voiceNote,
-                            int width, int height, boolean quote)
+                            int width, int height, long linkedId, boolean quote)
   {
     super(contentType, transferProgress, size, fileName, location, key, relay, digest, fastPreflightId, voiceNote, width, height, quote);
     this.attachmentId = attachmentId;
     this.hasData      = hasData;
     this.hasThumbnail = hasThumbnail;
     this.mmsId        = mmsId;
+    this.linkedId     = linkedId;
   }
 
   @Override
@@ -48,6 +50,10 @@ public class DatabaseAttachment extends Attachment {
 
   public AttachmentId getAttachmentId() {
     return attachmentId;
+  }
+
+  public long getLinkedId() {
+    return linkedId;
   }
 
   @Override

@@ -22,7 +22,6 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.TypedArray;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.net.Uri;
@@ -55,7 +54,13 @@ import org.thoughtcrime.securesms.components.DeliveryStatusView;
 import org.thoughtcrime.securesms.components.DocumentView;
 import org.thoughtcrime.securesms.components.ExpirationTimerView;
 import org.thoughtcrime.securesms.components.QuoteView;
+import org.thoughtcrime.securesms.components.SharedContactView;
 import org.thoughtcrime.securesms.components.ThumbnailView;
+import org.thoughtcrime.securesms.contactshare.SharedContactViewModel;
+import org.thoughtcrime.securesms.contactshare.model.Contact;
+import org.thoughtcrime.securesms.contactshare.model.ContactRetriever;
+import org.thoughtcrime.securesms.contactshare.model.Phone;
+import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.AttachmentDatabase;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MmsDatabase;
@@ -115,6 +120,7 @@ public class ConversationItem extends LinearLayout
 
   protected View             bodyBubble;
   private QuoteView          quoteView;
+  private SharedContactView  sharedContactView;
   private TextView           bodyText;
   private TextView           dateText;
   private TextView           simInfoText;
@@ -133,6 +139,7 @@ public class ConversationItem extends LinearLayout
   private @NonNull  Stub<AudioView>      audioViewStub;
   private @NonNull  Stub<DocumentView>   documentViewStub;
   private @NonNull  ExpirationTimerView  expirationTimer;
+  private @NonNull  ViewModelRetriever   viewModelRetriever;
   private @Nullable EventListener        eventListener;
 
   private int defaultBubbleColor;
@@ -179,6 +186,7 @@ public class ConversationItem extends LinearLayout
     this.expirationTimer         =            findViewById(R.id.expiration_indicator);
     this.groupSenderHolder       =            findViewById(R.id.group_sender_holder);
     this.quoteView               =            findViewById(R.id.quote_view);
+    this.sharedContactView       =            findViewById(R.id.shared_contact_view);
 
     setOnClickListener(new ClickListener(null));
 
@@ -194,6 +202,7 @@ public class ConversationItem extends LinearLayout
                    @NonNull Locale             locale,
                    @NonNull Set<MessageRecord> batchSelected,
                    @NonNull Recipient          conversationRecipient,
+                   @NonNull ViewModelRetriever viewModelRetriever,
                             boolean            pulseHighlight)
   {
     this.messageRecord          = messageRecord;
@@ -203,6 +212,7 @@ public class ConversationItem extends LinearLayout
     this.conversationRecipient  = conversationRecipient;
     this.groupThread            = conversationRecipient.isGroupRecipient();
     this.recipient              = messageRecord.getIndividualRecipient();
+    this.viewModelRetriever     = viewModelRetriever;
 
     this.recipient.addListener(this);
     this.conversationRecipient.addListener(this);
@@ -218,6 +228,7 @@ public class ConversationItem extends LinearLayout
     setSimInfo(messageRecord);
     setExpiration(messageRecord);
     setQuote(messageRecord);
+    setSharedContacts(messageRecord);
   }
 
   @Override
@@ -576,6 +587,109 @@ public class ConversationItem extends LinearLayout
     }
   }
 
+  private void setSharedContacts(final @NonNull MessageRecord message) {
+    if (message.isMms() && !message.isMmsNotification() && ((MediaMmsMessageRecord) message).getSharedContacts().size() > 0) {
+      sharedContactView.setVisibility(VISIBLE);
+
+      ContactRetriever       retriever = ((MediaMmsMessageRecord) message).getSharedContacts().get(0);
+      SharedContactViewModel viewModel = viewModelRetriever.getSharedContactViewModel(getSharedContactViewModelKey(message), retriever);
+
+      viewModel.refresh(retriever);
+
+      viewModel.getContactDetails().observe(viewModelRetriever.getLifecycleOwner(), contactViewDetails -> {
+        if (message.getId() != messageRecord.getId()) {
+          Log.w(TAG, "Retrieved a contact for display, but the viewholder is now bound to a different message.");
+          return;
+        }
+
+        if (contactViewDetails == null) {
+          Log.w(TAG, "Failed to retrieve the contact.");
+          return;
+        }
+
+        Contact contact = contactViewDetails.getContactInfo().getContact();
+
+        sharedContactView.setContact(contactViewDetails, glideRequests, locale);
+
+        sharedContactView.setOnClickListener(view -> {
+          if (eventListener != null && batchSelected.isEmpty()) {
+            eventListener.onSharedContactDetailsClicked(contact, sharedContactView.getAvatarView());
+          } else {
+            passthroughClickListener.onClick(view);
+          }
+        });
+
+        sharedContactView.setEventListener(new SharedContactView.EventListener() {
+          @Override
+          public void onAddToContactsClicked(@NonNull Contact clickedContact) {
+            if (eventListener != null && batchSelected.isEmpty()) {
+              eventListener.onAddToContactClicked(clickedContact, viewModel);
+              viewModelRetriever.setExistingContactSelectedListener(viewModel::saveDetailsToExistingContact);
+            } else {
+              passthroughClickListener.onClick(sharedContactView);
+            }
+          }
+
+          @Override
+          public void onInviteClicked(@NonNull Phone phoneNumber) {
+            if (eventListener != null && batchSelected.isEmpty()) {
+              Address address = Address.fromExternal(context, phoneNumber.getNumber());
+              viewModel.getThreadId(address).observe(viewModelRetriever.getLifecycleOwner(), threadId -> {
+                if (threadId == null) {
+                  return;
+                }
+                eventListener.onOpenConversation(address, threadId, context.getString(R.string.InviteActivity_lets_switch_to_signal, "https://sgnl.link/1KpeYmF"));
+              });
+            } else {
+              passthroughClickListener.onClick(sharedContactView);
+            }
+          }
+
+          @Override
+          public void onMessageClicked(@NonNull Phone phoneNumber) {
+            if (eventListener != null && batchSelected.isEmpty()) {
+              Address address = Address.fromExternal(context, phoneNumber.getNumber());
+              viewModel.getThreadId(address).observe(viewModelRetriever.getLifecycleOwner(), threadId -> {
+                if (threadId == null) {
+                  return;
+                }
+                eventListener.onOpenConversation(address, threadId, null);
+              });
+            } else {
+              passthroughClickListener.onClick(sharedContactView);
+            }
+          }
+        });
+
+        sharedContactView.setOnLongClickListener(passthroughClickListener);
+      });
+
+      viewModel.getEvent().observe(viewModelRetriever.getLifecycleOwner(), event -> {
+        if (event == null) {
+          return;
+        }
+
+        switch (event) {
+          case NEW_CONTACT_ERROR:
+            Toast.makeText(context, R.string.SharedContactDetailsActivity_new_contact_failure, Toast.LENGTH_SHORT).show();
+            break;
+          case EDIT_CONTACT_ERROR:
+            Toast.makeText(context, R.string.SharedContactDetailsActivity_new_contact_failure, Toast.LENGTH_SHORT).show();
+            break;
+          case INITIALIZATION_ERROR:
+            Toast.makeText(context, R.string.SharedContactDetailsActivity_initialization_failure, Toast.LENGTH_SHORT).show();
+            break;
+        }
+      });
+    } else {
+      sharedContactView.setVisibility(GONE);
+    }
+  }
+
+  private String getSharedContactViewModelKey(@NonNull MessageRecord messageRecord) {
+    return messageRecord.getRecipient().getAddress().serialize() + messageRecord.getTimestamp();
+  }
+
   private void setFailedStatusIcons() {
     alertView.setFailed();
     deliveryStatusIndicator.setNone();
@@ -794,5 +908,4 @@ public class ConversationItem extends LinearLayout
     });
     builder.show();
   }
-
 }

@@ -46,6 +46,7 @@ public class MediaUtil {
   public static final String AUDIO_AAC         = "audio/aac";
   public static final String AUDIO_UNSPECIFIED = "audio/*";
   public static final String VIDEO_UNSPECIFIED = "video/*";
+  public static final String CONTACT           = "text/signal-contact";
 
 
   public static Slide getSlideForAttachment(Context context, Attachment attachment) {

@@ -71,6 +71,7 @@ public class ConversationUpdateItem extends LinearLayout
                    @NonNull Locale             locale,
                    @NonNull Set<MessageRecord> batchSelected,
                    @NonNull Recipient          conversationRecipient,
+                   @NonNull ViewModelRetriever viewModelRetriever,
                             boolean            pulseUpdate)
   {
     this.batchSelected = batchSelected;

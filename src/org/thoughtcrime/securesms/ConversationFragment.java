@@ -18,6 +18,8 @@ package org.thoughtcrime.securesms;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.arch.lifecycle.LifecycleOwner;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -26,6 +28,9 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.ActivityOptionsCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.LoaderManager;
 import android.support.v4.content.Loader;
@@ -50,8 +55,16 @@ import android.view.animation.AnimationUtils;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.thoughtcrime.securesms.BindableConversationItem.ExistingContactSelectedListener;
 import org.thoughtcrime.securesms.ConversationAdapter.HeaderViewHolder;
 import org.thoughtcrime.securesms.ConversationAdapter.ItemClickListener;
+import org.thoughtcrime.securesms.contactshare.ContactRepository;
+import org.thoughtcrime.securesms.contactshare.ContactUtil;
+import org.thoughtcrime.securesms.contactshare.SharedContactDetailsActivity;
+import org.thoughtcrime.securesms.contactshare.SharedContactViewModel;
+import org.thoughtcrime.securesms.contactshare.model.Contact;
+import org.thoughtcrime.securesms.contactshare.model.ContactRetriever;
+import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MmsSmsDatabase;
 import org.thoughtcrime.securesms.database.RecipientDatabase;
@@ -59,6 +72,7 @@ import org.thoughtcrime.securesms.database.loaders.ConversationLoader;
 import org.thoughtcrime.securesms.database.model.MediaMmsMessageRecord;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
+import org.thoughtcrime.securesms.mms.AttachmentManager;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.mms.OutgoingMediaMessage;
 import org.thoughtcrime.securesms.mms.Slide;
@@ -66,6 +80,7 @@ import org.thoughtcrime.securesms.profiles.UnknownSenderView;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.sms.OutgoingTextMessage;
+import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.SaveAttachmentTask;
 import org.thoughtcrime.securesms.util.SaveAttachmentTask.Attachment;
 import org.thoughtcrime.securesms.util.StickyHeaderDecoration;
@@ -81,16 +96,18 @@ import java.util.Set;
 
 @SuppressLint("StaticFieldLeak")
 public class ConversationFragment extends Fragment
-  implements LoaderManager.LoaderCallbacks<Cursor>
+  implements LoaderManager.LoaderCallbacks<Cursor>, BindableConversationItem.ViewModelRetriever
 {
   private static final String TAG = ConversationFragment.class.getSimpleName();
 
-  private static final long   PARTIAL_CONVERSATION_LIMIT = 500L;
+  private static final long   PARTIAL_CONVERSATION_LIMIT  = 500L;
+  private static final int    CODE_PICK_CONTACT_TO_ADD_TO = 77;
 
   private final ActionModeCallback actionModeCallback     = new ActionModeCallback();
   private final ItemClickListener  selectionClickListener = new ConversationFragmentItemClickListener();
 
-  private ConversationFragmentListener listener;
+  private ConversationFragmentListener    listener;
+  private ExistingContactSelectedListener existingContactSelectedListener;
 
   private Recipient                   recipient;
   private long                        threadId;
@@ -105,11 +122,18 @@ public class ConversationFragment extends Fragment
   private View                        composeDivider;
   private View                        scrollToBottomButton;
   private TextView                    scrollDateHeader;
+  private ContactRepository           contactRepository;
 
   @Override
   public void onCreate(Bundle icicle) {
     super.onCreate(icicle);
     this.locale = (Locale) getArguments().getSerializable(PassphraseRequiredActionBarActivity.LOCALE_EXTRA);
+
+    this.contactRepository = new ContactRepository(getContext(),
+                                                   SignalExecutors.DATABASE,
+                                                   locale,
+                                                   DatabaseFactory.getContactsDatabase(getContext()),
+                                                   DatabaseFactory.getThreadDatabase(getContext()));
   }
 
   @Override
@@ -190,7 +214,7 @@ public class ConversationFragment extends Fragment
 
   private void initializeListAdapter() {
     if (this.recipient != null && this.threadId != -1) {
-      ConversationAdapter adapter = new ConversationAdapter(getActivity(), GlideApp.with(this), locale, selectionClickListener, null, this.recipient);
+      ConversationAdapter adapter = new ConversationAdapter(getActivity(), GlideApp.with(this), locale, selectionClickListener, null, this.recipient, this);
       list.setAdapter(adapter);
       list.addItemDecoration(new StickyHeaderDecoration(adapter, false, false));
 
@@ -499,6 +523,22 @@ public class ConversationFragment extends Fragment
     }
   }
 
+  @Override
+  public SharedContactViewModel getSharedContactViewModel(@NonNull String key, @NonNull ContactRetriever retriever) {
+    return ViewModelProviders.of(this, new SharedContactViewModel.RetrieverFactory(retriever, contactRepository))
+                             .get(key, SharedContactViewModel.class);
+  }
+
+  @Override
+  public LifecycleOwner getLifecycleOwner() {
+    return this;
+  }
+
+  @Override
+  public void setExistingContactSelectedListener(@Nullable ExistingContactSelectedListener listener) {
+    existingContactSelectedListener = listener;
+  }
+
   public interface ConversationFragmentListener {
     void setThreadId(long threadId);
     void handleReplyMessage(MessageRecord messageRecord);
@@ -651,6 +691,57 @@ public class ConversationFragment extends Fragment
           }
         }
       }.execute();
+    }
+
+    @Override
+    public void onSharedContactDetailsClicked(@NonNull Contact sharedContact, @NonNull View avatarTransitionView) {
+      Log.w(TAG, "Clicked on shared contact details.");
+      if (getContext() != null && getActivity() != null) {
+        Bundle bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(getActivity(), avatarTransitionView, "avatar").toBundle();
+        ActivityCompat.startActivity(getActivity(), SharedContactDetailsActivity.getIntent(getContext(), sharedContact), bundle);
+      }
+    }
+
+    @Override
+    public void onAddToContactClicked(@NonNull Contact sharedContact, @NonNull SharedContactViewModel viewModel) {
+      if (getContext() == null) {
+        return;
+      }
+
+      CharSequence[] options = new CharSequence[] { getString(R.string.SharedContactDetailsActivity_add_as_new_contact),
+                                                    getString(R.string.SharedContactDetailsActivity_add_to_existing_contact) };
+      new AlertDialog.Builder(getContext())
+          .setItems(options, (dialog, which) -> {
+            if (which == 0) {
+              viewModel.saveAsNewContact();
+            } else {
+              AttachmentManager.selectContactInfo(ConversationFragment.this, CODE_PICK_CONTACT_TO_ADD_TO);
+            }
+          })
+          .create()
+          .show();
+    }
+
+    @Override
+    public void onOpenConversation(@NonNull Address address, long threadId, @Nullable String text) {
+      if (getContext() == null) {
+        return;
+      }
+      CommunicationActions.startConversation(getContext(), address, threadId, text);
+    }
+  }
+
+  @Override
+  public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+
+    if (data == null || data.getData() == null || resultCode != Activity.RESULT_OK) {
+      return;
+    }
+
+    if (requestCode == CODE_PICK_CONTACT_TO_ADD_TO && existingContactSelectedListener != null) {
+      long contactId = ContactUtil.getContactIdFromUri(data.getData());
+      existingContactSelectedListener.onExistingContactSelected(contactId);
     }
   }
 

@@ -5,6 +5,8 @@ import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
+import org.thoughtcrime.securesms.contactshare.model.AttachmentContactRetriever;
+import org.thoughtcrime.securesms.contactshare.model.ContactRetriever;
 import org.thoughtcrime.securesms.database.documents.IdentityKeyMismatch;
 import org.thoughtcrime.securesms.database.documents.NetworkFailure;
 import org.thoughtcrime.securesms.mms.Slide;
@@ -15,8 +17,9 @@ import java.util.List;
 
 public abstract class MmsMessageRecord extends MessageRecord {
 
-  private final @NonNull  SlideDeck slideDeck;
-  private final @Nullable Quote     quote;
+  private final @NonNull  SlideDeck              slideDeck;
+  private final @Nullable Quote                  quote;
+  private final @NonNull  List<ContactRetriever> sharedContacts;
 
   MmsMessageRecord(Context context, long id, String body, Recipient conversationRecipient,
                    Recipient individualRecipient, int recipientDeviceId, long dateSent,
@@ -24,12 +27,13 @@ public abstract class MmsMessageRecord extends MessageRecord {
                    long type, List<IdentityKeyMismatch> mismatches,
                    List<NetworkFailure> networkFailures, int subscriptionId, long expiresIn,
                    long expireStarted, @NonNull SlideDeck slideDeck, int readReceiptCount,
-                   @Nullable Quote quote)
+                   @Nullable Quote quote, @NonNull List<ContactRetriever> sharedContacts)
   {
     super(context, id, body, conversationRecipient, individualRecipient, recipientDeviceId, dateSent, dateReceived, threadId, deliveryStatus, deliveryReceiptCount, type, mismatches, networkFailures, subscriptionId, expiresIn, expireStarted, readReceiptCount);
 
-    this.slideDeck = slideDeck;
-    this.quote     = quote;
+    this.slideDeck      = slideDeck;
+    this.quote          = quote;
+    this.sharedContacts = sharedContacts;
   }
 
   @Override
@@ -59,5 +63,9 @@ public abstract class MmsMessageRecord extends MessageRecord {
 
   public @Nullable Quote getQuote() {
     return quote;
+  }
+
+  public @NonNull List<ContactRetriever> getSharedContacts() {
+    return sharedContacts;
   }
 }

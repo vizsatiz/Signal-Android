@@ -96,6 +96,11 @@ import org.thoughtcrime.securesms.components.reminder.ReminderView;
 import org.thoughtcrime.securesms.components.reminder.UnauthorizedReminder;
 import org.thoughtcrime.securesms.contacts.ContactAccessor;
 import org.thoughtcrime.securesms.contacts.ContactAccessor.ContactData;
+import org.thoughtcrime.securesms.contactshare.ContactShareEditActivity;
+import org.thoughtcrime.securesms.contactshare.ContactUtil;
+import org.thoughtcrime.securesms.contactshare.RetrieveContactTask;
+import org.thoughtcrime.securesms.contactshare.model.Contact;
+import org.thoughtcrime.securesms.contactshare.model.Phone;
 import org.thoughtcrime.securesms.crypto.IdentityKeyParcelable;
 import org.thoughtcrime.securesms.crypto.SecurityEvent;
 import org.thoughtcrime.securesms.database.Address;
@@ -122,6 +127,7 @@ import org.thoughtcrime.securesms.mms.AttachmentManager.MediaType;
 import org.thoughtcrime.securesms.mms.AudioSlide;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.mms.GlideRequests;
+import org.thoughtcrime.securesms.mms.ImageSlide;
 import org.thoughtcrime.securesms.mms.LocationSlide;
 import org.thoughtcrime.securesms.mms.MediaConstraints;
 import org.thoughtcrime.securesms.mms.OutgoingExpirationUpdateMessage;
@@ -142,12 +148,12 @@ import org.thoughtcrime.securesms.recipients.RecipientFormattingException;
 import org.thoughtcrime.securesms.recipients.RecipientModifiedListener;
 import org.thoughtcrime.securesms.scribbles.ScribbleActivity;
 import org.thoughtcrime.securesms.service.KeyCachingService;
-import org.thoughtcrime.securesms.service.WebRtcCallService;
 import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.sms.OutgoingEncryptedMessage;
 import org.thoughtcrime.securesms.sms.OutgoingEndSessionMessage;
 import org.thoughtcrime.securesms.sms.OutgoingTextMessage;
 import org.thoughtcrime.securesms.util.CharacterCalculator.CharacterState;
+import org.thoughtcrime.securesms.util.CommunicationActions;
 import org.thoughtcrime.securesms.util.Dialogs;
 import org.thoughtcrime.securesms.util.DirectoryHelper;
 import org.thoughtcrime.securesms.util.DynamicLanguage;
@@ -170,6 +176,7 @@ import org.whispersystems.libsignal.util.guava.Optional;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -209,13 +216,14 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private static final int PICK_GALLERY      = 1;
   private static final int PICK_DOCUMENT     = 2;
   private static final int PICK_AUDIO        = 3;
-  private static final int PICK_CONTACT_INFO = 4;
-  private static final int GROUP_EDIT        = 5;
-  private static final int TAKE_PHOTO        = 6;
-  private static final int ADD_CONTACT       = 7;
-  private static final int PICK_LOCATION     = 8;
-  private static final int PICK_GIF          = 9;
-  private static final int SMS_DEFAULT       = 10;
+  private static final int PICK_CONTACT      = 4;
+  private static final int GET_CONTACT_INFO  = 5;
+  private static final int GROUP_EDIT        = 6;
+  private static final int TAKE_PHOTO        = 7;
+  private static final int ADD_CONTACT       = 8;
+  private static final int PICK_LOCATION     = 9;
+  private static final int PICK_GIF          = 10;
+  private static final int SMS_DEFAULT       = 11;
 
   private   GlideRequests               glideRequests;
   protected ComposeText                 composeText;
@@ -419,8 +427,15 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     case PICK_AUDIO:
       setMedia(data.getData(), MediaType.AUDIO);
       break;
-    case PICK_CONTACT_INFO:
-      addAttachmentContactInfo(data.getData());
+    case PICK_CONTACT:
+      if (isSecureText && !isSmsForced()) {
+        openContactShareEditor(data.getData());
+      } else {
+        addAttachmentContactInfo(data.getData());
+      }
+      break;
+    case GET_CONTACT_INFO:
+      sendContactShareInfo(data.getParcelableArrayListExtra(ContactShareEditActivity.KEY_CONTACTS));
       break;
     case GROUP_EDIT:
       recipient = Recipient.from(this, data.getParcelableExtra(GroupCreateActivity.GROUP_ADDRESS_EXTRA), true);
@@ -770,7 +785,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
                                            .setType(GroupContext.Type.QUIT)
                                            .build();
 
-        OutgoingGroupMediaMessage outgoingMessage = new OutgoingGroupMediaMessage(getRecipient(), context, null, System.currentTimeMillis(), 0, null);
+        OutgoingGroupMediaMessage outgoingMessage = new OutgoingGroupMediaMessage(getRecipient(), context, null, System.currentTimeMillis(), 0, null, Collections.emptyList());
         MessageSender.send(self, outgoingMessage, threadId, false, null);
         DatabaseFactory.getGroupDatabase(self).remove(groupId, Address.fromSerialized(TextSecurePreferences.getLocalNumber(self)));
         initializeEnabledCheck();
@@ -826,23 +841,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     if (recipient == null) return;
 
     if (isSecureText) {
-      Permissions.with(ConversationActivity.this)
-                 .request(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-                 .ifNecessary()
-                 .withRationaleDialog(getString(R.string.ConversationActivity_to_call_s_signal_needs_access_to_your_microphone_and_camera, recipient.toShortString()),
-                                      R.drawable.ic_mic_white_48dp, R.drawable.ic_videocam_white_48dp)
-                 .withPermanentDenialDialog(getString(R.string.ConversationActivity_signal_needs_the_microphone_and_camera_permissions_in_order_to_call_s, recipient.toShortString()))
-                 .onAllGranted(() -> {
-                   Intent intent = new Intent(this, WebRtcCallService.class);
-                   intent.setAction(WebRtcCallService.ACTION_OUTGOING_CALL);
-                   intent.putExtra(WebRtcCallService.EXTRA_REMOTE_ADDRESS, recipient.getAddress());
-                   startService(intent);
-
-                   Intent activityIntent = new Intent(this, WebRtcCallActivity.class);
-                   activityIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                   startActivity(activityIntent);
-                 })
-                 .execute();
+      CommunicationActions.startVoiceCall(this, recipient);
     } else {
       try {
         Intent dialIntent = new Intent(Intent.ACTION_DIAL,
@@ -1378,7 +1377,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     case AttachmentTypeSelector.ADD_SOUND:
       AttachmentManager.selectAudio(this, PICK_AUDIO); break;
     case AttachmentTypeSelector.ADD_CONTACT_INFO:
-      AttachmentManager.selectContactInfo(this, PICK_CONTACT_INFO); break;
+      AttachmentManager.selectContactInfo(this, PICK_CONTACT); break;
     case AttachmentTypeSelector.ADD_LOCATION:
       AttachmentManager.selectLocation(this, PICK_LOCATION); break;
     case AttachmentTypeSelector.TAKE_PHOTO:
@@ -1397,12 +1396,26 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     attachmentManager.setMedia(glideRequests, uri, mediaType, getCurrentMediaConstraints(), width, height);
   }
 
+  private void openContactShareEditor(Uri contactUri) {
+    long id = ContactUtil.getContactIdFromUri(contactUri);
+    Intent intent = ContactShareEditActivity.getIntent(this, Collections.singletonList(id));
+    startActivityForResult(intent, GET_CONTACT_INFO);
+  }
+
   private void addAttachmentContactInfo(Uri contactUri) {
     ContactAccessor contactDataList = ContactAccessor.getInstance();
     ContactData contactData = contactDataList.getContactData(this, contactUri);
 
     if      (contactData.numbers.size() == 1) composeText.append(contactData.numbers.get(0).number);
     else if (contactData.numbers.size() > 1)  selectContactInfo(contactData);
+  }
+
+  private void sendContactShareInfo(List<Contact> contacts) {
+    int        subscriptionId = sendButton.getSelectedTransport().getSimSubscriptionId().or(-1);
+    long       expiresIn      = recipient.getExpireMessages() * 1000L;
+    boolean    initiating     = threadId == -1;
+
+    sendMediaMessage(isSmsForced(), "", new SlideDeck(), expiresIn, subscriptionId, initiating, contacts);
   }
 
   private void selectContactInfo(ContactData contactData) {
@@ -1572,6 +1585,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     return getRecipient() != null && getRecipient().isPushGroupRecipient();
   }
 
+  private boolean isSmsForced() {
+    return sendButton.isManualSelection() && sendButton.getSelectedTransport().isSms();
+  }
+
   protected Recipient getRecipient() {
     return this.recipient;
   }
@@ -1579,6 +1596,7 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   protected long getThreadId() {
     return this.threadId;
   }
+
 
   private String getMessage() throws InvalidMessageException {
     String rawText = composeText.getTextTrimmed();
@@ -1685,8 +1703,33 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
     sendMediaMessage(forceSms, getMessage(), attachmentManager.buildSlideDeck(), expiresIn, subscriptionId, initiating);
   }
 
-  private ListenableFuture<Void> sendMediaMessage(final boolean forceSms, String body, SlideDeck slideDeck, final long expiresIn, final int subscriptionId, final boolean initiating) {
-    OutgoingMediaMessage outgoingMessageCandidate = new OutgoingMediaMessage(recipient, slideDeck, body, System.currentTimeMillis(), subscriptionId, expiresIn, distributionType, inputPanel.getQuote().orNull());
+  private ListenableFuture<Void> sendMediaMessage(boolean   forceSms,
+                                                  String    body,
+                                                  SlideDeck slideDeck,
+                                                  long      expiresIn,
+                                                  int       subscriptionId,
+                                                  boolean   initiating)
+  {
+    return sendMediaMessage(forceSms, body, slideDeck, expiresIn, subscriptionId, initiating, Collections.emptyList());
+  }
+
+  private ListenableFuture<Void> sendMediaMessage(final    boolean       forceSms,
+                                                           String        body,
+                                                           SlideDeck     slideDeck,
+                                                  final    long          expiresIn,
+                                                  final    int           subscriptionId,
+                                                  final    boolean       initiating,
+                                                  @NonNull List<Contact> contacts)
+  {
+    OutgoingMediaMessage outgoingMessageCandidate = new OutgoingMediaMessage(recipient,
+                                                                             slideDeck,
+                                                                             body,
+                                                                             System.currentTimeMillis(),
+                                                                             subscriptionId,
+                                                                             expiresIn,
+                                                                             distributionType,
+                                                                             inputPanel.getQuote().orNull(),
+                                                                             contacts);
 
     final SettableFuture<Void> future  = new SettableFuture<>();
     final Context              context = getApplicationContext();
@@ -2072,11 +2115,39 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       author = messageRecord.getIndividualRecipient();
     }
 
-    inputPanel.setQuote(GlideApp.with(this),
-                        messageRecord.getDateSent(),
-                        author,
-                        messageRecord.getBody(),
-                        messageRecord.isMms() ? ((MmsMessageRecord)messageRecord).getSlideDeck() : new SlideDeck());
+    if (messageRecord.isMms() && ((MmsMessageRecord) messageRecord).getSharedContacts().size() > 0) {
+      new RetrieveContactTask(((MmsMessageRecord) messageRecord).getSharedContacts().get(0), contact -> {
+        if (contact == null) return;
+
+        SlideDeck slideDeck = new SlideDeck();
+        if (contact.getAvatar() != null) {
+          slideDeck.addSlide(new ImageSlide(getApplicationContext(), contact.getAvatar().getImage()));
+        }
+
+        StringBuilder body = new StringBuilder();
+
+        body.append(ContactUtil.getDisplayName(contact));
+
+        Phone displayNumber = ContactUtil.getDisplayNumber(contact);
+        if (displayNumber != null) {
+          body.append('\n').append(ContactUtil.getPrettyPhoneNumber(displayNumber, dynamicLanguage.getCurrentLocale()));
+        } else if (contact.getEmails().size() > 0) {
+          body.append('\n').append(contact.getEmails().get(0).getEmail());
+        }
+
+        inputPanel.setQuote(GlideApp.with(this),
+                            messageRecord.getDateSent(),
+                            author,
+                            body.toString(),
+                            slideDeck);
+      }).execute();
+    } else {
+      inputPanel.setQuote(GlideApp.with(this),
+                          messageRecord.getDateSent(),
+                          author,
+                          messageRecord.getBody(),
+                          messageRecord.isMms() ? ((MmsMessageRecord) messageRecord).getSlideDeck() : new SlideDeck());
+    }
   }
 
   @Override

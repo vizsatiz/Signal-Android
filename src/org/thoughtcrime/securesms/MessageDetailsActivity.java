@@ -17,6 +17,8 @@
 package org.thoughtcrime.securesms;
 
 import android.annotation.SuppressLint;
+import android.arch.lifecycle.LifecycleOwner;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;
 import android.database.Cursor;
 import android.graphics.drawable.ColorDrawable;
@@ -35,8 +37,12 @@ import android.view.ViewGroup;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.thoughtcrime.securesms.BindableConversationItem.ExistingContactSelectedListener;
 import org.thoughtcrime.securesms.MessageDetailsRecipientAdapter.RecipientDeliveryStatus;
 import org.thoughtcrime.securesms.color.MaterialColor;
+import org.thoughtcrime.securesms.contactshare.ContactRepository;
+import org.thoughtcrime.securesms.contactshare.SharedContactViewModel;
+import org.thoughtcrime.securesms.contactshare.model.ContactRetriever;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.GroupReceiptDatabase;
 import org.thoughtcrime.securesms.database.GroupReceiptDatabase.GroupReceiptInfo;
@@ -67,7 +73,10 @@ import java.util.Locale;
 /**
  * @author Jake McGinty
  */
-public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity implements LoaderCallbacks<Cursor>, RecipientModifiedListener {
+public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity implements LoaderCallbacks<Cursor>,
+                                                                                           RecipientModifiedListener,
+                                                                                           BindableConversationItem.ViewModelRetriever
+{
   private final static String TAG = MessageDetailsActivity.class.getSimpleName();
 
   public final static String MESSAGE_ID_EXTRA     = "message_id";
@@ -96,6 +105,8 @@ public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity 
   private DynamicTheme     dynamicTheme    = new DynamicTheme();
   private DynamicLanguage  dynamicLanguage = new DynamicLanguage();
 
+  private ContactRepository contactRepository;
+
   private boolean running;
 
   @Override
@@ -112,6 +123,12 @@ public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity 
     initializeResources();
     initializeActionBar();
     getSupportLoaderManager().initLoader(0, null, this);
+
+    contactRepository = new ContactRepository(this,
+                                              SignalExecutors.DATABASE,
+                                              dynamicLanguage.getCurrentLocale(),
+                                              DatabaseFactory.getContactsDatabase(this),
+                                              DatabaseFactory.getThreadDatabase(this));
   }
 
   @Override
@@ -252,7 +269,7 @@ public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity 
       toFromRes = R.string.message_details_header__from;
     }
     toFrom.setText(toFromRes);
-    conversationItem.bind(messageRecord, glideRequests, dynamicLanguage.getCurrentLocale(), new HashSet<>(), recipient, false);
+    conversationItem.bind(messageRecord, glideRequests, dynamicLanguage.getCurrentLocale(), new HashSet<>(), recipient, this, false);
     recipientsList.setAdapter(new MessageDetailsRecipientAdapter(this, glideRequests, messageRecord, recipients, isPushGroup));
   }
 
@@ -317,6 +334,20 @@ public class MessageDetailsActivity extends PassphraseRequiredActionBarActivity 
 
     return false;
   }
+
+  @Override
+  public SharedContactViewModel getSharedContactViewModel(@NonNull String key, @NonNull ContactRetriever retriever) {
+    return ViewModelProviders.of(this, new SharedContactViewModel.RetrieverFactory(retriever, contactRepository))
+                             .get(key, SharedContactViewModel.class);
+  }
+
+  @Override
+  public LifecycleOwner getLifecycleOwner() {
+    return this;
+  }
+
+  @Override
+  public void setExistingContactSelectedListener(@Nullable ExistingContactSelectedListener listener) { }
 
   @SuppressLint("StaticFieldLeak")
   private class MessageRecipientAsyncTask extends AsyncTask<Void,Void,List<RecipientDeliveryStatus>> {

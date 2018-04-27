@@ -31,6 +31,7 @@ import android.widget.TextView;
 
 import com.annimon.stream.Stream;
 
+import org.thoughtcrime.securesms.BindableConversationItem.ViewModelRetriever;
 import org.thoughtcrime.securesms.ConversationAdapter.HeaderViewHolder;
 import org.thoughtcrime.securesms.attachments.DatabaseAttachment;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
@@ -91,14 +92,15 @@ public class ConversationAdapter <V extends View & BindableConversationItem>
 
   private final Set<MessageRecord> batchSelected = Collections.synchronizedSet(new HashSet<MessageRecord>());
 
-  private final @Nullable ItemClickListener clickListener;
-  private final @NonNull  GlideRequests     glideRequests;
-  private final @NonNull  Locale            locale;
-  private final @NonNull  Recipient         recipient;
-  private final @NonNull  MmsSmsDatabase    db;
-  private final @NonNull  LayoutInflater    inflater;
-  private final @NonNull  Calendar          calendar;
-  private final @NonNull  MessageDigest     digest;
+  private final @Nullable ItemClickListener  clickListener;
+  private final @NonNull  GlideRequests      glideRequests;
+  private final @NonNull  Locale             locale;
+  private final @NonNull  Recipient          recipient;
+  private final @NonNull  ViewModelRetriever viewModelRetriever;
+  private final @NonNull  MmsSmsDatabase     db;
+  private final @NonNull  LayoutInflater     inflater;
+  private final @NonNull  Calendar           calendar;
+  private final @NonNull  MessageDigest      digest;
 
   private MessageRecord recordToPulseHighlight;
 
@@ -143,14 +145,15 @@ public class ConversationAdapter <V extends View & BindableConversationItem>
   ConversationAdapter(Context context, Cursor cursor) {
     super(context, cursor);
     try {
-      this.glideRequests = null;
-      this.locale        = null;
-      this.clickListener = null;
-      this.recipient     = null;
-      this.inflater      = null;
-      this.db            = null;
-      this.calendar      = null;
-      this.digest        = MessageDigest.getInstance("SHA1");
+      this.glideRequests      = null;
+      this.locale             = null;
+      this.clickListener      = null;
+      this.recipient          = null;
+      this.viewModelRetriever = null;
+      this.inflater           = null;
+      this.db                 = null;
+      this.calendar           = null;
+      this.digest             = MessageDigest.getInstance("SHA1");
     } catch (NoSuchAlgorithmException nsae) {
       throw new AssertionError("SHA1 isn't supported!");
     }
@@ -161,19 +164,21 @@ public class ConversationAdapter <V extends View & BindableConversationItem>
                              @NonNull Locale locale,
                              @Nullable ItemClickListener clickListener,
                              @Nullable Cursor cursor,
-                             @NonNull Recipient recipient)
+                             @NonNull Recipient recipient,
+                             @NonNull ViewModelRetriever viewModelRetriever)
   {
     super(context, cursor);
 
     try {
-      this.glideRequests = glideRequests;
-      this.locale        = locale;
-      this.clickListener = clickListener;
-      this.recipient     = recipient;
-      this.inflater      = LayoutInflater.from(context);
-      this.db            = DatabaseFactory.getMmsSmsDatabase(context);
-      this.calendar      = Calendar.getInstance();
-      this.digest        = MessageDigest.getInstance("SHA1");
+      this.glideRequests      = glideRequests;
+      this.locale             = locale;
+      this.clickListener      = clickListener;
+      this.recipient          = recipient;
+      this.viewModelRetriever = viewModelRetriever;
+      this.inflater           = LayoutInflater.from(context);
+      this.db                 = DatabaseFactory.getMmsSmsDatabase(context);
+      this.calendar           = Calendar.getInstance();
+      this.digest             = MessageDigest.getInstance("SHA1");
 
       setHasStableIds(true);
     } catch (NoSuchAlgorithmException nsae) {
@@ -191,7 +196,7 @@ public class ConversationAdapter <V extends View & BindableConversationItem>
   @Override
   protected void onBindItemViewHolder(ViewHolder viewHolder, @NonNull MessageRecord messageRecord) {
     long start = System.currentTimeMillis();
-    viewHolder.getView().bind(messageRecord, glideRequests, locale, batchSelected, recipient, messageRecord == recordToPulseHighlight);
+    viewHolder.getView().bind(messageRecord, glideRequests, locale, batchSelected, recipient, viewModelRetriever, messageRecord == recordToPulseHighlight);
     if (messageRecord == recordToPulseHighlight) {
       recordToPulseHighlight = null;
     }
@@ -461,6 +466,5 @@ public class ConversationAdapter <V extends View & BindableConversationItem>
       return viewHolder;
     }
   }
-
 }
 

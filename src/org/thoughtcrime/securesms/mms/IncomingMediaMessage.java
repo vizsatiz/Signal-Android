@@ -2,12 +2,14 @@ package org.thoughtcrime.securesms.mms;
 
 import org.thoughtcrime.securesms.attachments.Attachment;
 import org.thoughtcrime.securesms.attachments.PointerAttachment;
+import org.thoughtcrime.securesms.contactshare.model.Contact;
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.util.GroupUtil;
 import org.whispersystems.libsignal.util.guava.Optional;
 import org.whispersystems.signalservice.api.messages.SignalServiceAttachment;
 import org.whispersystems.signalservice.api.messages.SignalServiceGroup;
 
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -21,7 +23,8 @@ public class IncomingMediaMessage {
   private final int           subscriptionId;
   private final long          expiresIn;
   private final boolean       expirationUpdate;
-  private final QuoteModel quote;
+  private final QuoteModel    quote;
+  private final List<Contact> sharedContacts;
 
   private final List<Attachment> attachments = new LinkedList<>();
 
@@ -43,6 +46,7 @@ public class IncomingMediaMessage {
     this.expiresIn        = expiresIn;
     this.expirationUpdate = expirationUpdate;
     this.quote            = null;
+    this.sharedContacts   = Collections.emptyList();
 
     this.attachments.addAll(attachments);
   }
@@ -56,7 +60,8 @@ public class IncomingMediaMessage {
                               Optional<String> body,
                               Optional<SignalServiceGroup> group,
                               Optional<List<SignalServiceAttachment>> attachments,
-                              Optional<QuoteModel> quote)
+                              Optional<QuoteModel> quote,
+                              List<Contact> sharedContacts)
   {
     this.push             = true;
     this.from             = from;
@@ -66,6 +71,7 @@ public class IncomingMediaMessage {
     this.expiresIn        = expiresIn;
     this.expirationUpdate = expirationUpdate;
     this.quote            = quote.orNull();
+    this.sharedContacts   = sharedContacts;
 
     if (group.isPresent()) this.groupId = Address.fromSerialized(GroupUtil.getEncodedId(group.get().getGroupId(), false));
     else                   this.groupId = null;
@@ -115,5 +121,9 @@ public class IncomingMediaMessage {
 
   public QuoteModel getQuote() {
     return quote;
+  }
+
+  public List<Contact> getSharedContacts() {
+    return sharedContacts;
   }
 }

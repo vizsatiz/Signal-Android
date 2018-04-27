@@ -39,12 +39,14 @@ import android.util.Log;
 
 import org.thoughtcrime.securesms.ConversationActivity;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.contactshare.ContactUtil;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.MessagingDatabase.MarkedMessageInfo;
 import org.thoughtcrime.securesms.database.MmsSmsDatabase;
 import org.thoughtcrime.securesms.database.ThreadDatabase;
 import org.thoughtcrime.securesms.database.model.MediaMmsMessageRecord;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
+import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
 import org.thoughtcrime.securesms.mms.SlideDeck;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.service.KeyCachingService;
@@ -428,6 +430,13 @@ public class MessageNotifier {
 
       if (KeyCachingService.isLocked(context)) {
         body = SpanUtil.italic(context.getString(R.string.MessageNotifier_locked_message));
+      } else if (record.isMms() && ((MmsMessageRecord) record).getSharedContacts().size() > 0) {
+        String contactName = ContactUtil.getDisplayName(((MmsMessageRecord) record).getSharedContacts().get(0).getContact());
+        if (!TextUtils.isEmpty(contactName)) {
+          body = context.getString(R.string.MessageNotifier_contact_message, contactName);
+        } else {
+          body = SpanUtil.italic(context.getString(R.string.MessageNotifier_unknown_contact_message));
+        }
       } else if (record.isMms() && TextUtils.isEmpty(body)) {
         body = SpanUtil.italic(context.getString(R.string.MessageNotifier_media_message));
         slideDeck = ((MediaMmsMessageRecord)record).getSlideDeck();

@@ -32,6 +32,7 @@ import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.app.Fragment;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -376,6 +377,18 @@ public class AttachmentManager {
                  activity.startActivityForResult(intent, requestCode);
                })
                .execute();
+  }
+
+  public static void selectContactInfo(Fragment fragment, int requestCode) {
+    Permissions.with(fragment)
+        .request(Manifest.permission.WRITE_CONTACTS)
+        .ifNecessary()
+        .withPermanentDenialDialog(fragment.getString(R.string.AttachmentManager_signal_requires_contacts_permission_in_order_to_attach_contact_information))
+        .onAllGranted(() -> {
+          Intent intent = new Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI);
+          fragment.startActivityForResult(intent, requestCode);
+        })
+        .execute();
   }
 
   public static void selectLocation(Activity activity, int requestCode) {
