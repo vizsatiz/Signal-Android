@@ -18,6 +18,7 @@ import org.thoughtcrime.securesms.PassphraseRequiredActionBarActivity;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.SignalExecutors;
 import org.thoughtcrime.securesms.contactshare.model.Contact;
+import org.thoughtcrime.securesms.contactshare.model.Name;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.mms.GlideApp;
 import org.thoughtcrime.securesms.util.DynamicLanguage;
@@ -28,10 +29,11 @@ import java.util.List;
 
 import static org.thoughtcrime.securesms.contactshare.ContactShareEditViewModel.*;
 
-public class ContactShareEditActivity extends PassphraseRequiredActionBarActivity {
+public class ContactShareEditActivity extends PassphraseRequiredActionBarActivity implements ContactShareEditAdapter.EventListener {
 
-  public  static final String KEY_CONTACTS  = "contacts";
+  public  static final String KEY_CONTACTS    = "contacts";
   private static final String KEY_CONTACT_IDS = "ids";
+  private static final int    CODE_NAME_EDIT  = 55;
 
   private final DynamicTheme    dynamicTheme    = new DynamicTheme();
   private final DynamicLanguage dynamicLanguage = new DynamicLanguage();
@@ -74,7 +76,7 @@ public class ContactShareEditActivity extends PassphraseRequiredActionBarActivit
     contactList.setLayoutManager(new LinearLayoutManager(this));
     contactList.getLayoutManager().setAutoMeasureEnabled(true);
 
-    ContactShareEditAdapter contactAdapter = new ContactShareEditAdapter(GlideApp.with(this), dynamicLanguage.getCurrentLocale());
+    ContactShareEditAdapter contactAdapter = new ContactShareEditAdapter(GlideApp.with(this), dynamicLanguage.getCurrentLocale(), this);
     contactList.setAdapter(contactAdapter);
 
     ContactRepository contactRepository = new ContactRepository(this,
@@ -119,5 +121,26 @@ public class ContactShareEditActivity extends PassphraseRequiredActionBarActivit
     setResult(Activity.RESULT_OK, intent);
 
     finish();
+  }
+
+  @Override
+  public void onNameEditClicked(int position, @NonNull Name name) {
+    startActivityForResult(ContactNameEditActivity.getIntent(this, name, position), CODE_NAME_EDIT);
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+
+    if (requestCode != CODE_NAME_EDIT || resultCode != RESULT_OK || data == null) {
+      return;
+    }
+
+    int  position = data.getIntExtra(ContactNameEditActivity.KEY_CONTACT_INDEX, -1);
+    Name name     = data.getParcelableExtra(ContactNameEditActivity.KEY_NAME);
+
+    if (name != null) {
+      viewModel.updateContactName(position, name);
+    }
   }
 }

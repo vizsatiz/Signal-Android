@@ -16,6 +16,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.components.AvatarImageView;
 import org.thoughtcrime.securesms.contactshare.model.Contact;
+import org.thoughtcrime.securesms.contactshare.model.Name;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader;
 import org.thoughtcrime.securesms.mms.DecryptableStreamUriLoader.DecryptableUri;
 import org.thoughtcrime.securesms.mms.GlideRequests;
@@ -27,13 +28,15 @@ import java.util.Locale;
 
 public class ContactShareEditAdapter extends RecyclerView.Adapter<ContactShareEditAdapter.ContactEditViewHolder> {
 
-  private final Locale        locale;
   private final GlideRequests glideRequests;
+  private final Locale        locale;
+  private final EventListener eventListener;
   private final List<Contact> contacts;
 
-  ContactShareEditAdapter(@NonNull GlideRequests glideRequests, @NonNull Locale locale) {
-    this.locale        = locale;
+  ContactShareEditAdapter(@NonNull GlideRequests glideRequests, @NonNull Locale locale, @NonNull EventListener eventListener) {
     this.glideRequests = glideRequests;
+    this.locale        = locale;
+    this.eventListener = eventListener;
     this.contacts      = new ArrayList<>();
   }
 
@@ -44,7 +47,7 @@ public class ContactShareEditAdapter extends RecyclerView.Adapter<ContactShareEd
 
   @Override
   public void onBindViewHolder(ContactEditViewHolder holder, int position) {
-    holder.bind(contacts.get(position), glideRequests);
+    holder.bind(position, contacts.get(position), glideRequests, eventListener);
   }
 
   @Override
@@ -66,14 +69,16 @@ public class ContactShareEditAdapter extends RecyclerView.Adapter<ContactShareEd
 
     private final AvatarImageView     avatar;
     private final TextView            name;
+    private final View                nameEditButton;
     private final ContactFieldAdapter fieldAdapter;
 
     ContactEditViewHolder(View itemView, @NonNull Locale locale) {
       super(itemView);
 
-      this.avatar       = itemView.findViewById(R.id.editable_contact_avatar);
-      this.name         = itemView.findViewById(R.id.editable_contact_name);
-      this.fieldAdapter = new ContactFieldAdapter(locale, true);
+      this.avatar         = itemView.findViewById(R.id.editable_contact_avatar);
+      this.name           = itemView.findViewById(R.id.editable_contact_name);
+      this.nameEditButton = itemView.findViewById(R.id.editable_contact_name_edit_button);
+      this.fieldAdapter   = new ContactFieldAdapter(locale, true);
 
       RecyclerView fields = itemView.findViewById(R.id.editable_contact_fields);
       fields.setLayoutManager(new LinearLayoutManager(itemView.getContext()));
@@ -81,7 +86,7 @@ public class ContactShareEditAdapter extends RecyclerView.Adapter<ContactShareEd
       fields.setAdapter(fieldAdapter);
     }
 
-    void bind(@NonNull Contact contact, @NonNull GlideRequests glideRequests) {
+    void bind(int position, @NonNull Contact contact, @NonNull GlideRequests glideRequests, @NonNull EventListener eventListener) {
       Context context = itemView.getContext();
 
       if (contact.getAvatar() != null && contact.getAvatar().getImage().getDataUri() != null) {
@@ -98,7 +103,12 @@ public class ContactShareEditAdapter extends RecyclerView.Adapter<ContactShareEd
       }
 
       name.setText(ContactUtil.getDisplayName(contact));
+      nameEditButton.setOnClickListener(v -> eventListener.onNameEditClicked(position, contact.getName()));
       fieldAdapter.setFields(context, contact.getPhoneNumbers(), contact.getEmails(), contact.getPostalAddresses());
     }
+  }
+
+  interface EventListener {
+    void onNameEditClicked(int position, @NonNull Name name);
   }
 }
