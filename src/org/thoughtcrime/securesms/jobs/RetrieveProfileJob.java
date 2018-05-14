@@ -69,8 +69,7 @@ public class RetrieveProfileJob extends ContextJob implements InjectableType {
   public void onCanceled() {}
 
   private void handleIndividualRecipient(Recipient recipient)
-      throws IOException, InvalidKeyException, InvalidNumberException
-  {
+      throws IOException {
     String               number  = recipient.getAddress().toPhoneString();
     SignalServiceProfile profile = retrieveProfile(number);
 

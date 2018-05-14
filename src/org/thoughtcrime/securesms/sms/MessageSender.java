@@ -149,8 +149,6 @@ public class MessageSender {
   {
     if (!forceSms && isSelfSend(context, recipient)) {
       sendTextSelf(context, messageId, expiresIn);
-    } else if (!forceSms && isPushTextSend(context, recipient, keyExchange)) {
-      sendTextPush(context, recipient, messageId);
     } else {
       sendSms(context, recipient, messageId);
     }

@@ -57,7 +57,6 @@ import dagger.Provides;
                                      PushMediaSendJob.class,
                                      AttachmentDownloadJob.class,
                                      RefreshPreKeysJob.class,
-                                     MessageRetrievalService.class,
                                      PushNotificationReceiveJob.class,
                                      MultiDeviceContactUpdateJob.class,
                                      MultiDeviceGroupUpdateJob.class,

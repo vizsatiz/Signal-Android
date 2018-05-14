@@ -97,7 +97,10 @@ import org.thoughtcrime.securesms.components.reminder.UnauthorizedReminder;
 import org.thoughtcrime.securesms.contacts.ContactAccessor;
 import org.thoughtcrime.securesms.contacts.ContactAccessor.ContactData;
 import org.thoughtcrime.securesms.crypto.IdentityKeyParcelable;
+import org.thoughtcrime.securesms.crypto.IdentityKeyUtil;
+import org.thoughtcrime.securesms.crypto.PreKeyUtil;
 import org.thoughtcrime.securesms.crypto.SecurityEvent;
+import org.thoughtcrime.securesms.crypto.SessionUtil;
 import org.thoughtcrime.securesms.database.Address;
 import org.thoughtcrime.securesms.database.DatabaseFactory;
 import org.thoughtcrime.securesms.database.DraftDatabase;
@@ -115,6 +118,7 @@ import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
 import org.thoughtcrime.securesms.events.ReminderUpdateEvent;
 import org.thoughtcrime.securesms.giph.ui.GiphyActivity;
+import org.thoughtcrime.securesms.jobs.DirectoryRefreshJob;
 import org.thoughtcrime.securesms.jobs.MultiDeviceBlockedUpdateJob;
 import org.thoughtcrime.securesms.jobs.RetrieveProfileJob;
 import org.thoughtcrime.securesms.mms.AttachmentManager;
@@ -137,11 +141,14 @@ import org.thoughtcrime.securesms.notifications.MessageNotifier;
 import org.thoughtcrime.securesms.permissions.Permissions;
 import org.thoughtcrime.securesms.profiles.GroupShareProfileView;
 import org.thoughtcrime.securesms.providers.PersistentBlobProvider;
+import org.thoughtcrime.securesms.push.AccountManagerFactory;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientFormattingException;
 import org.thoughtcrime.securesms.recipients.RecipientModifiedListener;
 import org.thoughtcrime.securesms.scribbles.ScribbleActivity;
+import org.thoughtcrime.securesms.service.DirectoryRefreshListener;
 import org.thoughtcrime.securesms.service.KeyCachingService;
+import org.thoughtcrime.securesms.service.RotateSignedPreKeyListener;
 import org.thoughtcrime.securesms.service.WebRtcCallService;
 import org.thoughtcrime.securesms.sms.MessageSender;
 import org.thoughtcrime.securesms.sms.OutgoingEncryptedMessage;
@@ -164,8 +171,13 @@ import org.thoughtcrime.securesms.util.concurrent.AssertedSuccessListener;
 import org.thoughtcrime.securesms.util.concurrent.ListenableFuture;
 import org.thoughtcrime.securesms.util.concurrent.SettableFuture;
 import org.thoughtcrime.securesms.util.views.Stub;
+import org.whispersystems.libsignal.IdentityKeyPair;
 import org.whispersystems.libsignal.InvalidMessageException;
+import org.whispersystems.libsignal.state.PreKeyRecord;
+import org.whispersystems.libsignal.state.SignedPreKeyRecord;
+import org.whispersystems.libsignal.util.KeyHelper;
 import org.whispersystems.libsignal.util.guava.Optional;
+import org.whispersystems.signalservice.api.SignalServiceAccountManager;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
@@ -256,6 +268,10 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   private final DynamicTheme       dynamicTheme    = new DynamicTheme();
   private final DynamicLanguage    dynamicLanguage = new DynamicLanguage();
 
+  private SignalServiceAccountManager accountManager;
+  RegistrationState registrationState = new ConversationActivity.RegistrationState(ConversationActivity.RegistrationState.State.INITIAL,
+          null, null, null);
+
   @Override
   protected void onPreCreate() {
     dynamicTheme.onCreate(this);
@@ -277,6 +293,17 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
 
     fragment = initFragment(R.id.fragment_content, new ConversationFragment(), dynamicLanguage.getCurrentLocale());
 
+    String password = Util.getSecret(18);
+    //accountManager = AccountManagerFactory.createManager(ConversationActivity.this, "+919618134706", password);
+    registrationState = new ConversationActivity.RegistrationState(ConversationActivity.RegistrationState.State.VERIFYING,
+            "+918129038009", password, null);
+
+    try {
+      verifyAccount();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    initializePermissions();
     initializeReceivers();
     initializeActionBar();
     initializeViews();
@@ -288,6 +315,53 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         initializeDraft();
       }
     });
+
+  }
+
+  private void verifyAccount() throws IOException {
+    int registrationId = KeyHelper.generateRegistrationId(false);
+    TextSecurePreferences.setLocalRegistrationId(ConversationActivity.this, registrationId);
+    SessionUtil.archiveAllSessions(ConversationActivity.this);
+
+    String signalingKey = Util.getSecret(52);
+
+    //accountManager.verifyAccountWithCode(code, signalingKey, registrationId, !registrationState.gcmToken.isPresent(), pin);
+
+    IdentityKeyPair identityKey  = IdentityKeyUtil.getIdentityKeyPair(ConversationActivity.this);
+    List<PreKeyRecord> records      = PreKeyUtil.generatePreKeys(ConversationActivity.this);
+    SignedPreKeyRecord signedPreKey = PreKeyUtil.generateSignedPreKey(ConversationActivity.this, identityKey, true);
+
+    // accountManager.setPreKeys(identityKey.getPublicKey(), signedPreKey, records);
+
+//    if (registrationState.gcmToken.isPresent()) {
+//      accountManager.setGcmId(registrationState.gcmToken);
+//    }
+
+    TextSecurePreferences.setGcmRegistrationId(ConversationActivity.this, null);
+    TextSecurePreferences.setGcmDisabled(ConversationActivity.this, true);
+    TextSecurePreferences.setWebsocketRegistered(ConversationActivity.this, true);
+
+    DatabaseFactory.getIdentityDatabase(ConversationActivity.this)
+            .saveIdentity(Address.fromSerialized(registrationState.e164number),
+                    identityKey.getPublicKey(), IdentityDatabase.VerifiedStatus.VERIFIED,
+                    true, System.currentTimeMillis(), true);
+
+    this.registrationState = new ConversationActivity.RegistrationState(ConversationActivity.RegistrationState.State.CHECKING,
+            this.registrationState);
+
+    TextSecurePreferences.setVerifying(ConversationActivity.this, false);
+    TextSecurePreferences.setPushRegistered(ConversationActivity.this, true);
+    TextSecurePreferences.setLocalNumber(ConversationActivity.this, registrationState.e164number);
+    TextSecurePreferences.setPushServerPassword(ConversationActivity.this, registrationState.password);
+    TextSecurePreferences.setSignalingKey(ConversationActivity.this, signalingKey);
+    TextSecurePreferences.setSignedPreKeyRegistered(ConversationActivity.this, true);
+    TextSecurePreferences.setPromptedPushRegistration(ConversationActivity.this, true);
+    TextSecurePreferences.setUnauthorizedReceived(ConversationActivity.this, false);
+
+    // ApplicationContext.getInstance(ConversationActivity.this).getJobManager().add(new DirectoryRefreshJob(ConversationActivity.this, false));
+
+    // DirectoryRefreshListener.schedule(ConversationActivity.this);
+    RotateSignedPreKeyListener.schedule(ConversationActivity.this);
   }
 
   @Override
@@ -1078,15 +1152,16 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
         }
 
         Log.w(TAG, "Resolved registered state: " + registeredState);
-        boolean           signalEnabled   = TextSecurePreferences.isPushRegistered(context);
+        // push disabled
+        boolean           signalEnabled   = false;
 
         if (registeredState == RegisteredState.UNKNOWN) {
-          try {
-            Log.w(TAG, "Refreshing directory for user: " + recipient.getAddress().serialize());
-            registeredState = DirectoryHelper.refreshDirectoryFor(context, recipient);
-          } catch (IOException e) {
-            Log.w(TAG, e);
-          }
+//          try {
+//            Log.w(TAG, "Refreshing directory for user: " + recipient.getAddress().serialize());
+//            registeredState = DirectoryHelper.refreshDirectoryFor(context, recipient);
+//          } catch (IOException e) {
+//            Log.w(TAG, e);
+//          }
         }
 
         Log.w(TAG, "Returning registered state...");
@@ -1496,6 +1571,11 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
   }
 
   private void setBlockedUserState(Recipient recipient, boolean isSecureText, boolean isDefaultSms) {
+    composePanel.setVisibility(View.VISIBLE);
+    unblockButton.setVisibility(View.GONE);
+    makeDefaultSmsButton.setVisibility(View.GONE);
+
+    /*registerButton.setVisibility(View.GONE);
     if (recipient.isBlocked()) {
       unblockButton.setVisibility(View.VISIBLE);
       composePanel.setVisibility(View.GONE);
@@ -1516,7 +1596,29 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       unblockButton.setVisibility(View.GONE);
       makeDefaultSmsButton.setVisibility(View.GONE);
       registerButton.setVisibility(View.GONE);
-    }
+    }*/
+  }
+
+  @SuppressLint("InlinedApi")
+  private void initializePermissions() {
+    Permissions.with(ConversationActivity.this)
+            .request(Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_CONTACTS,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG,
+                    Manifest.permission.PROCESS_OUTGOING_CALLS)
+            .ifNecessary()
+            .withRationaleDialog(getString(R.string.RegistrationActivity_signal_needs_access_to_your_contacts_and_media_in_order_to_connect_with_friends),
+                    R.drawable.ic_contacts_white_48dp, R.drawable.ic_folder_white_48dp)
+            .onSomeGranted(permissions -> {
+              if (permissions.contains(Manifest.permission.READ_PHONE_STATE)) {
+                //initializeNumber();
+              }
+
+              if (permissions.contains(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                //initializeBackupDetection();
+              }
+            })
+            .execute();
   }
 
   private void setGroupShareProfileReminder(@NonNull Recipient recipient) {
@@ -2172,6 +2274,31 @@ public class ConversationActivity extends PassphraseRequiredActionBarActivity
       } else {
         Log.e(TAG, "Failed to restore a quote from a draft. No matching message record.");
       }
+    }
+  }
+
+  private static class RegistrationState {
+    private enum State {
+      INITIAL, VERIFYING, CHECKING, PIN
+    }
+
+    private final ConversationActivity.RegistrationState.State state;
+    private final String  e164number;
+    private final String  password;
+    private final Optional<String> gcmToken;
+
+    RegistrationState(ConversationActivity.RegistrationState.State state, String e164number, String password, Optional<String> gcmToken) {
+      this.state      = state;
+      this.e164number = e164number;
+      this.password   = password;
+      this.gcmToken   = gcmToken;
+    }
+
+    RegistrationState(ConversationActivity.RegistrationState.State state, ConversationActivity.RegistrationState previous) {
+      this.state      = state;
+      this.e164number = previous.e164number;
+      this.password   = previous.password;
+      this.gcmToken   = previous.gcmToken;
     }
   }
 }

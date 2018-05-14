@@ -168,15 +168,15 @@ public class MessageRetrievalService extends Service implements InjectableType, 
   }
 
   public static void registerActivityStarted(Context activity) {
-    Intent intent = new Intent(activity, MessageRetrievalService.class);
-    intent.setAction(MessageRetrievalService.ACTION_ACTIVITY_STARTED);
-    activity.startService(intent);
+//    Intent intent = new Intent(activity, MessageRetrievalService.class);
+//    intent.setAction(MessageRetrievalService.ACTION_ACTIVITY_STARTED);
+//    activity.startService(intent);
   }
 
   public static void registerActivityStopped(Context activity) {
-    Intent intent = new Intent(activity, MessageRetrievalService.class);
-    intent.setAction(MessageRetrievalService.ACTION_ACTIVITY_FINISHED);
-    activity.startService(intent);
+//    Intent intent = new Intent(activity, MessageRetrievalService.class);
+//    intent.setAction(MessageRetrievalService.ACTION_ACTIVITY_FINISHED);
+//    activity.startService(intent);
   }
 
   public static @Nullable SignalServiceMessagePipe getPipe() {
@@ -199,35 +199,10 @@ public class MessageRetrievalService extends Service implements InjectableType, 
         waitForConnectionNecessary();
 
         Log.w(TAG, "Making websocket connection....");
-        pipe = receiver.createMessagePipe();
+        //pipe = receiver.createMessagePipe();
 
         SignalServiceMessagePipe localPipe = pipe;
 
-        try {
-          while (isConnectionNecessary() && !stopThread.get()) {
-            try {
-              Log.w(TAG, "Reading message...");
-              localPipe.read(REQUEST_TIMEOUT_MINUTES, TimeUnit.MINUTES,
-                             envelope -> {
-                               Log.w(TAG, "Retrieved envelope! " + envelope.getSource());
-
-                               PushContentReceiveJob receiveJob = new PushContentReceiveJob(MessageRetrievalService.this);
-                               receiveJob.handle(envelope);
-
-                               decrementPushReceived();
-                             });
-            } catch (TimeoutException e) {
-              Log.w(TAG, "Application level read timeout...");
-            } catch (InvalidVersionException e) {
-              Log.w(TAG, e);
-            }
-          }
-        } catch (Throwable e) {
-          Log.w(TAG, e);
-        } finally {
-          Log.w(TAG, "Shutting down pipe...");
-          shutdown(localPipe);
-        }
 
         Log.w(TAG, "Looping...");
       }

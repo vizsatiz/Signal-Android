@@ -35,7 +35,6 @@ import org.thoughtcrime.securesms.jobs.requirements.MasterSecretRequirementProvi
 import org.thoughtcrime.securesms.jobs.requirements.ServiceRequirementProvider;
 import org.thoughtcrime.securesms.jobs.requirements.SqlCipherMigrationRequirementProvider;
 import org.thoughtcrime.securesms.push.SignalServiceNetworkAccess;
-import org.thoughtcrime.securesms.service.DirectoryRefreshListener;
 import org.thoughtcrime.securesms.service.ExpiringMessageManager;
 import org.thoughtcrime.securesms.service.LocalBackupListener;
 import org.thoughtcrime.securesms.service.RotateSignedPreKeyListener;
@@ -86,11 +85,12 @@ public class ApplicationContext extends MultiDexApplication implements Dependenc
     initializeDependencyInjection();
     initializeJobManager();
     initializeExpiringMessageManager();
-    initializeGcmCheck();
-    initializeSignedPreKeyCheck();
+    // initializeGcmCheck();
+   // initializeSignedPreKeyCheck();
     initializePeriodicTasks();
     initializeCircumvention();
     initializeWebRtc();
+    TextSecurePreferences.setPromptedPushRegistration(this, true);
   }
 
   @Override
@@ -156,7 +156,7 @@ public class ApplicationContext extends MultiDexApplication implements Dependenc
 
   private void initializePeriodicTasks() {
     RotateSignedPreKeyListener.schedule(this);
-    DirectoryRefreshListener.schedule(this);
+    // DirectoryRefreshListener.schedule(this);
     LocalBackupListener.schedule(this);
 
     if (BuildConfig.PLAY_STORE_DISABLED) {
